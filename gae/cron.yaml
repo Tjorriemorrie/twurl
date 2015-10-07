@@ -1,0 +1,4 @@
+cron:
+- description: scrape topics
+  url: /cron/topics
+  schedule: every day 07:00

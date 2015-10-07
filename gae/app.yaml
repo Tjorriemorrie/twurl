@@ -1,12 +1,19 @@
 module: default
-version: 1
 runtime: python27
 api_version: 1
 threadsafe: yes
 
+libraries:
+- name: ssl
+  version: latest
+
 handlers:
 - url: /static
   static_dir: src/static
+
+- url: /cron.*
+  script: src.app
+  login: admin
 
 - url: /.*
   script: src.app
