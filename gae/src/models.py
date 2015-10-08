@@ -51,6 +51,12 @@ class Tweet(ndb.Model):
         return tweet
 
     @staticmethod
+    def fetchByTopic(topic):
+        tweets = Tweet.query(ancestor=ndb.Key('Topic', topic)).fetch()
+        app.logger.info('Fetched {} tweets by {}'.format(len(tweets), topic))
+        return tweets
+
+    @staticmethod
     def since_id(topic):
         last_tweet = Tweet.query(
             ancestor=ndb.Key('Topic', topic),
@@ -64,14 +70,16 @@ class Tweet(ndb.Model):
         return since_id
 
     @staticmethod
-    def removeOld(month_ago, topic):
-        app.logger.info('Remove old tweets before {}'.format(month_ago))
+    @ndb.transactional
+    def removeOld(time_ago, topic):
+        app.logger.info('Remove old tweets before {}'.format(time_ago))
 
-        tweets = Tweet.query(Tweet.updated_at < month_ago, keys_only=True).fetch()
-        for tweet in tweets:
-            tweet.key.delete()
+        tweet_keys = Tweet.query(Tweet.updated_at < time_ago, ancestor=ndb.Key('Topic', topic)).fetch(keys_only=True)
+        for tweet_key in tweet_keys:
+            app.logger.debug('Removing tweet {}'.format(tweet_key))
+            tweet_key.delete()
 
-        app.logger.info('Removed {} tweets for {}'.format(len(tweets), topic))
+        app.logger.info('Removed {} tweets for {}'.format(len(tweet_keys), topic))
 
 
 # {u'in_reply_to_status_id': None,
@@ -155,3 +163,21 @@ class Tweet(ndb.Model):
 #  u'is_quote_status': False,
 #  u'contributors': None
 #  }
+
+class Link(ndb.Model):
+    id = ndb.StringProperty(required=True)
+    tweeted_count = ndb.IntegerProperty(required=True)
+    retweeted_sum = ndb.FloatProperty(required=True)
+    favorite_sum = ndb.FloatProperty(required=True)
+    priority = ndb.ComputedProperty(lambda self: self.tweeted_count + self.retweeted_sum + self.favorite_sum)
+
+    created_at = ndb.DateTimeProperty(auto_now_add=True)
+    updated_at = ndb.DateTimeProperty(auto_now=True)
+
+    @staticmethod
+    def create(topic, url, url_info):
+        link = Link.get_or_insert(url, parent=ndb.Key('Topic', topic), **url_info)
+        link.populate(**url_info)
+        link.put()
+        app.logger.debug('Link: {}'.format(link))
+        return link

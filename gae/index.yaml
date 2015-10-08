@@ -15,3 +15,8 @@ indexes:
   properties:
   - name: id
     direction: desc
+
+- kind: Tweet
+  ancestor: yes
+  properties:
+  - name: updated_at

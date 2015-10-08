@@ -1,10 +1,11 @@
 from src import app
-from flask import request, render_template, json, Response
-from models import User, Tweet
+from flask import request, render_template, json, Response, abort
+from models import User, Tweet, Link
 import urllib
 import base64
 from google.appengine.api import urlfetch, taskqueue
 import datetime
+import math
 
 
 @app.route('/')
@@ -104,9 +105,14 @@ def cronTopic():
     # 450 / (15 * 60) = 0.5 per second
     # thus 1 request every 2 seconds
     month_ago = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+    day_ago = datetime.datetime.utcnow() - datetime.timedelta(days=1)
     params = urllib.urlencode({
-        'q': 'filter:links since:{} #{}'.format(month_ago.strftime('%Y-%m-%d'), topic),
-        'result_type': 'recent',
+        'q': 'filter:links since:{} until:{} #{} -filter:retweets'.format(
+            month_ago.strftime('%Y-%m-%d'),
+            day_ago.strftime('%Y-%m-%d'),
+            topic,
+        ),
+        'result_type': 'popular',
         'include_entities': 1,
         'count': 100,
         'since_id': since_id,
@@ -148,29 +154,60 @@ def cronTopic():
 
     app.logger.info('Scraping topic {} finished'.format(topic))
 
-    # params = {
-    #     'topic': topic,
-    # }
-    # taskqueue.add(url='/cron/parse/urls', params=params)
-    # app.logger.info('Task created to parse urls for {}'.format(topic))
+    taskqueue.add(url='/cron/remove/tweets', params={'topic': topic})
+    app.logger.info('Task created to remove tweets for {}'.format(topic))
 
     return Response('OK')
 
 
-@app.route('/cron/parse/urls', methods=['GET', 'POST'])
-def parseUrls():
-    topic = request.form.get('topic')
-    app.logger.info('Topic params received: {}'.format(topic))
+@app.route('/cron/remove/tweets', methods=['GET', 'POST'])
+def removeTweets():
+    topic = request.args.get('topic')
+    if not topic:
+        abort(400)
+    app.logger.info('Topic param received: {}'.format(topic))
 
-    month_ago = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+    # delete old tweets (> 1 year)
+    Tweet.removeOld(datetime.datetime.utcnow() - datetime.timedelta(days=30), topic)
 
-    # delete old tweets (> 1 month)
-    Tweet.removeOld(month_ago, topic)
+    # taskqueue.add(url='/cron/remove/tweets', params={'topic': topic})
+    # app.logger.info('Task created to remove tweets for {}'.format(topic))
 
-    # get all tweets by topic
+    return Response('OK')
+
+
+@app.route('/cron/score/urls', methods=['GET', 'POST'])
+def scoreUrls():
+    topic = request.args.get('topic')
+    if not topic:
+        abort(400)
+    app.logger.info('Topic param received: {}'.format(topic))
+
+    tweets = Tweet.fetchByTopic(topic)
 
     # group by url and add score
+    urlScores = {}
+    for tweet in tweets:
+        for url in tweet.urls:
+            if url not in urlScores:
+                urlScores[url] = {
+                    'id': url,
+                    'tweeted_count': 0,
+                    'retweeted_sum': 0.,
+                    'favorite_sum': 0.,
+                }
+            app.logger.debug(tweet)
+            urlScores[url]['tweeted_count'] += 1
+            urlScores[url]['retweeted_sum'] += math.log(max(1, tweet.retweet_count))
+            urlScores[url]['favorite_sum'] += math.log(max(1, tweet.favorite_count))
+            app.logger.debug('Tweet values: {} for {}'.format(urlScores[url], url))
+        break
+
+    for url, url_info in urlScores.iteritems():
+        link = Link.create(topic, url, url_info)
+
+    return Response('OK')
+
 
     # delete old urls
 
-    return Response('OK')
