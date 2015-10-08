@@ -177,7 +177,30 @@ class Link(ndb.Model):
     @staticmethod
     def create(topic, url, url_info):
         link = Link.get_or_insert(url, parent=ndb.Key('Topic', topic), **url_info)
-        link.populate(**url_info)
-        link.put()
+        if link.tweeted_count != url_info['tweeted_count']:
+            link.populate(**url_info)
+            link.put()
         app.logger.debug('Link: {}'.format(link))
         return link
+
+    @ndb.transactional
+    @staticmethod
+    def removeOld(topic, time_ago):
+        app.logger.info('Remove old links before {}'.format(time_ago))
+
+        link_keys = Link.query(Link.updated_at < time_ago, ancestor=ndb.Key('Topic', topic)).fetch(keys_only=True)
+        for link_key in link_keys:
+            app.logger.debug('Removing link {}'.format(link_key))
+            link_key.delete()
+
+        app.logger.info('Removed {} links for {}'.format(len(link_keys), topic))
+
+
+class UserLink(ndb.Model):
+    user = ndb.KeyProperty(User, kind=User, required=True)
+    link = ndb.KeyProperty(Link, kind=Link, required=True)
+    scheduled_at = ndb.DateTimeProperty(required=True)
+    read_at = ndb.DateTimeProperty()
+
+    created_at = ndb.DateTimeProperty(auto_now_add=True)
+    updated_at = ndb.DateTimeProperty(auto_now=True)

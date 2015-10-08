@@ -170,8 +170,8 @@ def removeTweets():
     # delete old tweets (> 1 year)
     Tweet.removeOld(datetime.datetime.utcnow() - datetime.timedelta(days=30), topic)
 
-    # taskqueue.add(url='/cron/remove/tweets', params={'topic': topic})
-    # app.logger.info('Task created to remove tweets for {}'.format(topic))
+    taskqueue.add(url='/cron/score/urls', params={'topic': topic})
+    app.logger.info('Task created to score urls for {}'.format(topic))
 
     return Response('OK')
 
@@ -196,18 +196,44 @@ def scoreUrls():
                     'retweeted_sum': 0.,
                     'favorite_sum': 0.,
                 }
-            app.logger.debug(tweet)
+            # app.logger.debug(tweet)
             urlScores[url]['tweeted_count'] += 1
             urlScores[url]['retweeted_sum'] += math.log(max(1, tweet.retweet_count))
             urlScores[url]['favorite_sum'] += math.log(max(1, tweet.favorite_count))
-            app.logger.debug('Tweet values: {} for {}'.format(urlScores[url], url))
-        break
 
     for url, url_info in urlScores.iteritems():
         link = Link.create(topic, url, url_info)
 
+    taskqueue.add(url='/cron/delete/urls', params={'topic': topic})
+    app.logger.info('Task created to delete urls for {}'.format(topic))
+
+    app.logger.info('{} tweets created {} urls'.format(len(tweets), len(urlScores)))
     return Response('OK')
 
 
-    # delete old urls
+@app.route('/cron/delete/urls', methods=['GET', 'POST'])
+def deleteUrls():
+    topic = request.args.get('topic')
+    if not topic:
+        abort(400)
+    app.logger.info('Topic param received: {}'.format(topic))
+
+    Link.removeOld(topic, datetime.datetime.utcnow() - datetime.timedelta(days=30))
+
+    # app.logger.info('{} tweets created {} urls'.format(len(tweets), len(urlScores)))
+    return Response('OK')
+
+
+# @app.route('/cron/schedule/links', methods=['GET', 'POST'])
+# def scheduleLinks():
+#     topic = request.args.get('topic')
+#     if not topic:
+#         abort(400)
+#     app.logger.info('Topic param received: {}'.format(topic))
+#
+#     Link.removeOld(topic, datetime.datetime.utcnow() - datetime.timedelta(days=30))
+#
+#     # app.logger.info('{} tweets created {} urls'.format(len(tweets), len(urlScores)))
+#     return Response('OK')
+#
 
