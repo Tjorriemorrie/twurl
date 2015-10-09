@@ -1,6 +1,6 @@
 from src import app
 from flask import request, render_template, json, Response, abort
-from models import User, Tweet, Link
+from models import User, Tweet, Link, UserLink
 import urllib
 import base64
 from google.appengine.api import urlfetch, taskqueue
@@ -41,7 +41,7 @@ def topicCreate():
     return render_template('base.html', **params)
 
 
-@app.route('/cron/topics')
+@app.route('/cron/topics', methods=['GET', 'POST'])
 def cronTopics():
 
     consumer_key = 'G8v4IHt7misK6qliT5eH3p1Rp'
@@ -96,7 +96,15 @@ def cronTopic():
 
     access_token = 'AAAAAAAAAAAAAAAAAAAAABcJYAAAAAAAVviSzyKtPYqYlHpZxoim6DHvfjI%3DU0slNkvBKQRynT62gbvQjEhAlE2PvzVZNia99xAdoJweI2OLqe'
 
-    topic = request.form.get('topic')
+    if request.method == 'POST':
+        app.logger.info('request form: {}'.format(request.form))
+        topic = request.form.get('topic')
+    elif request.method == 'GET':
+        app.logger.info('request args: {}'.format(request.args))
+        topic = request.args.get('topic')
+    if not topic:
+        abort(400)
+
     since_id = request.form.get('since_id')
     app.logger.info('Topic params received: {} {}'.format(topic, since_id))
 
@@ -112,7 +120,7 @@ def cronTopic():
             day_ago.strftime('%Y-%m-%d'),
             topic,
         ),
-        'result_type': 'popular',
+        'result_type': 'recent',
         'include_entities': 1,
         'count': 100,
         'since_id': since_id,
@@ -162,7 +170,12 @@ def cronTopic():
 
 @app.route('/cron/remove/tweets', methods=['GET', 'POST'])
 def removeTweets():
-    topic = request.args.get('topic')
+    if request.method == 'POST':
+        app.logger.info('request form: {}'.format(request.form))
+        topic = request.form.get('topic')
+    elif request.method == 'GET':
+        app.logger.info('request args: {}'.format(request.args))
+        topic = request.args.get('topic')
     if not topic:
         abort(400)
     app.logger.info('Topic param received: {}'.format(topic))
@@ -178,7 +191,12 @@ def removeTweets():
 
 @app.route('/cron/score/urls', methods=['GET', 'POST'])
 def scoreUrls():
-    topic = request.args.get('topic')
+    if request.method == 'POST':
+        app.logger.info('request form: {}'.format(request.form))
+        topic = request.form.get('topic')
+    elif request.method == 'GET':
+        app.logger.info('request args: {}'.format(request.args))
+        topic = request.args.get('topic')
     if not topic:
         abort(400)
     app.logger.info('Topic param received: {}'.format(topic))
@@ -213,27 +231,61 @@ def scoreUrls():
 
 @app.route('/cron/delete/urls', methods=['GET', 'POST'])
 def deleteUrls():
-    topic = request.args.get('topic')
+    if request.method == 'POST':
+        app.logger.info('request form: {}'.format(request.form))
+        topic = request.form.get('topic')
+    elif request.method == 'GET':
+        app.logger.info('request args: {}'.format(request.args))
+        topic = request.args.get('topic')
     if not topic:
         abort(400)
     app.logger.info('Topic param received: {}'.format(topic))
 
     Link.removeOld(topic, datetime.datetime.utcnow() - datetime.timedelta(days=30))
 
-    # app.logger.info('{} tweets created {} urls'.format(len(tweets), len(urlScores)))
     return Response('OK')
 
 
-# @app.route('/cron/schedule/links', methods=['GET', 'POST'])
-# def scheduleLinks():
-#     topic = request.args.get('topic')
-#     if not topic:
-#         abort(400)
-#     app.logger.info('Topic param received: {}'.format(topic))
-#
-#     Link.removeOld(topic, datetime.datetime.utcnow() - datetime.timedelta(days=30))
-#
-#     # app.logger.info('{} tweets created {} urls'.format(len(tweets), len(urlScores)))
-#     return Response('OK')
-#
+@app.route('/cron/schedule/links', methods=['GET', 'POST'])
+def scheduleLinks():
+    ''' Run this after quota reset '''
+    # get topics
+    user_topics = User.query(projection=[User.topics], distinct=True).fetch()
+    topics = [user.topics[0] for user in user_topics]
+    app.logger.info('Topics fetched: {}'.format(topics))
 
+    for topic in topics:
+        taskqueue.add(url='/cron/schedule/link', params={'topic': topic})
+        app.logger.info('Created push queue to schedule link for {}'.format(topic))
+
+    app.logger.info('All topics pushed')
+    return Response('OK')
+
+
+@app.route('/cron/schedule/link', methods=['GET', 'POST'])
+def scheduleLink():
+    if request.method == 'POST':
+        app.logger.info('request form: {}'.format(request.form))
+        topic = request.form.get('topic')
+    elif request.method == 'GET':
+        app.logger.info('request args: {}'.format(request.args))
+        topic = request.args.get('topic')
+    if not topic:
+        abort(400)
+    app.logger.info('Topic param received: {}'.format(topic))
+
+    # get users by topic
+    users = User.fetchByTopic(topic)
+
+    # get ordered links by topic
+    links = Link.fetchByTopic(topic)
+
+    # for every user
+    for user in users:
+        # get userlinks
+        userLinks = UserLink.fetchByUser(user)
+        # then loop through ordered links
+            # and assign first non-userlink to user
+
+    # app.logger.info('{} tweets created {} urls'.format(len(tweets), len(urlScores)))
+    return Response('OK')

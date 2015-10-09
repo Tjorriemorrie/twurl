@@ -10,6 +10,12 @@ class User(ndb.Model):
     created_at = ndb.DateTimeProperty(auto_now_add=True)
     updated_at = ndb.DateTimeProperty(auto_now=True)
 
+    @staticmethod
+    def fetchByTopic(topic):
+        users = User.query(User.topics == topic).fetch()
+        app.logger.info('Fetched {} users for topic {}'.format(len(users), topic))
+        return users
+
 
 class Tweet(ndb.Model):
     id = ndb.StringProperty(required=True)
@@ -183,8 +189,14 @@ class Link(ndb.Model):
         app.logger.debug('Link: {}'.format(link))
         return link
 
-    @ndb.transactional
     @staticmethod
+    def fetchByTopic(topic):
+        links = Link.query(ancestor=ndb.Key('Topic', topic)).order(-Link.priority).fetch()
+        app.logger.info('Fetched {} links for topic {}'.format(len(links), topic))
+        return links
+
+    @staticmethod
+    @ndb.transactional
     def removeOld(topic, time_ago):
         app.logger.info('Remove old links before {}'.format(time_ago))
 
@@ -197,10 +209,20 @@ class Link(ndb.Model):
 
 
 class UserLink(ndb.Model):
-    user = ndb.KeyProperty(User, kind=User, required=True)
-    link = ndb.KeyProperty(Link, kind=Link, required=True)
+    user_key = ndb.KeyProperty(User, required=True)
+    user_id = ndb.StringProperty(required=True)
+    link = ndb.KeyProperty(Link, required=True)
+    link_id = ndb.StringProperty(required=True)
+    tweeted_count = ndb.IntegerProperty(required=True)
+    priority = ndb.FloatProperty(required=True)
     scheduled_at = ndb.DateTimeProperty(required=True)
     read_at = ndb.DateTimeProperty()
 
     created_at = ndb.DateTimeProperty(auto_now_add=True)
     updated_at = ndb.DateTimeProperty(auto_now=True)
+
+    @staticmethod
+    def fetchByUser(user):
+        userLinks = UserLink.query(UserLink.user_key == user.key).fetch()
+        app.logger.info('Fetched {} userLinks for user {}'.format(len(userLinks), user))
+        return userLinks

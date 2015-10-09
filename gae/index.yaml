@@ -10,6 +10,17 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
+- kind: Link
+  ancestor: yes
+  properties:
+  - name: priority
+    direction: desc
+
+- kind: Link
+  ancestor: yes
+  properties:
+  - name: updated_at
+
 - kind: Tweet
   ancestor: yes
   properties:
