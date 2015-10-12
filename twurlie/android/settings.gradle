@@ -1,0 +1,3 @@
+rootProject.name = 'twurlie'
+
+include ':app'

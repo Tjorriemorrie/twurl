@@ -1,8 +1,8 @@
 cron:
 - description: scrape topics
   url: /cron/topics
-  schedule: every day 07:00
+  schedule: every day 06:30
 
 - description: schedule links
   url: /cron/schedule/links
-  schedule: every day 09:00
+  schedule: every day 06:00

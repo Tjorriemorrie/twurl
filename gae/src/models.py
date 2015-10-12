@@ -5,10 +5,28 @@ import datetime
 
 class User(ndb.Model):
     email = ndb.StringProperty(required=True)
+    password = ndb.StringProperty(required=True)
     topics = ndb.StringProperty(repeated=True)
 
     created_at = ndb.DateTimeProperty(auto_now_add=True)
     updated_at = ndb.DateTimeProperty(auto_now=True)
+
+    @staticmethod
+    def authenticate(email, password):
+        app.logger.info('[User] Authenticating {}'.format(email))
+        user = User.query(User.email == email).get()
+        if not user:
+            user = User(email=email, password=password, topics=['twurlie'])
+            user.put()
+            app.logger.info('User created')
+        else:
+            #if user.password != password
+            user.password = password
+            user.put()
+            app.logger.info('[User] authenticate: skipping password check')
+
+        app.logger.info('User {}'.format(user))
+        return user
 
     @staticmethod
     def fetchByTopic(topic):
@@ -86,6 +104,7 @@ class Tweet(ndb.Model):
             tweet_key.delete()
 
         app.logger.info('Removed {} tweets for {}'.format(len(tweet_keys), topic))
+        return len(tweet_keys)
 
 
 # {u'in_reply_to_status_id': None,
@@ -186,7 +205,7 @@ class Link(ndb.Model):
         if link.tweeted_count != url_info['tweeted_count']:
             link.populate(**url_info)
             link.put()
-        app.logger.debug('Link: {}'.format(link))
+        # app.logger.debug('Link: {}'.format(link))
         return link
 
     @staticmethod
@@ -206,6 +225,7 @@ class Link(ndb.Model):
             link_key.delete()
 
         app.logger.info('Removed {} links for {}'.format(len(link_keys), topic))
+        return len(link_keys)
 
 
 class UserLink(ndb.Model):
@@ -222,7 +242,42 @@ class UserLink(ndb.Model):
     updated_at = ndb.DateTimeProperty(auto_now=True)
 
     @staticmethod
+    def create(topic, user, link):
+        info = {
+            'user_key': user.key,
+            'user_id': user.email,
+            'link': link.key,
+            'link_id': link.id,
+            'tweeted_count': link.tweeted_count,
+            'priority': link.priority,
+            'scheduled_at': datetime.datetime.utcnow(),
+        }
+        userLink = UserLink(parent=ndb.Key('Topic', topic), **info)
+        userLink.put()
+        app.logger.debug('UserLink: {}'.format(userLink))
+        return userLink
+
+    @staticmethod
     def fetchByUser(user):
         userLinks = UserLink.query(UserLink.user_key == user.key).fetch()
         app.logger.info('Fetched {} userLinks for user {}'.format(len(userLinks), user))
         return userLinks
+
+    @staticmethod
+    def findByUserAndLink(user, link):
+        userLink = UserLink.query(
+            UserLink.user_key == user.key,
+            UserLink.link == link.key
+        ).get()
+        app.logger.debug('Found userlink for user and link: {}'.format(userLink))
+        return userLink
+
+    @staticmethod
+    def findLastByUser(topic, user):
+        userLink = UserLink.query(
+            UserLink.user_key == user.key,
+            ancestor=ndb.Key('Topic', topic)
+        ).get()
+        app.logger.debug('Found last userlink for user and topic: {}'.format(userLink))
+        return userLink
+

@@ -3,9 +3,10 @@ from flask import request, render_template, json, Response, abort
 from models import User, Tweet, Link, UserLink
 import urllib
 import base64
-from google.appengine.api import urlfetch, taskqueue
+from google.appengine.api import urlfetch, taskqueue, mail
 import datetime
 import math
+from flask.ext.jsontools import jsonapi
 
 
 @app.route('/')
@@ -16,15 +17,20 @@ def index():
     return render_template('base.html', **params)
 
 
-@app.route('/create/user')
-def userCreate():
-    user = User(email='jacoj82@gmail.com')
-    user.put()
-    params = {
-        'user': user,
-    }
-    app.logger.info('userCreate: {}'.format(params))
-    return render_template('base.html', **params)
+@app.route('/user', methods=['GET', 'POST'])
+@jsonapi
+def user():
+    app.logger.info('data {}'.format(request.data))
+    data = json.loads(request.data)
+    user = User.authenticate(data['email'], data['password'])
+    # user = User(email='jacoj82@gmail.com')
+    # user.put()
+    # params = {
+    #     'user': user,
+    # }
+    # app.logger.info('userCreate: {}'.format(params))
+    # return render_template('base.html', **params)
+    return user.key.urlsafe()
 
 
 @app.route('/topic/create')
@@ -87,7 +93,14 @@ def cronTopics():
         app.logger.info('Created push queue for {}'.format(params))
         taskqueue.add(url='/cron/topic', params=params)
 
-    app.logger.info('All topics pushed')
+    mail.send_mail(
+        sender='jacoj82@gmail.com',
+        to='jacoj82@gmail.com',
+        subject='Cron Topics',
+        body='All {} topics pushed'.format(len(topics)),
+    )
+
+    app.logger.info('All {} topics pushed'.format(len(topics)))
     return Response('OK')
 
 
@@ -136,12 +149,14 @@ def cronTopic():
     )
     app.logger.info(res)
 
+    cnt = 0
     while True:
         content = json.loads(res.content)
         metadata = content['search_metadata']
         statuses = content['statuses']
         # app.logger.info('Metadata: {}'.format(metadata))
         # app.logger.info('Statuses: {}'.format(len(statuses)))
+        cnt += len(statuses)
 
         for status in statuses:
             app.logger.info('Processing status')
@@ -160,11 +175,19 @@ def cronTopic():
                 },
             )
 
-    app.logger.info('Scraping topic {} finished'.format(topic))
 
+    # continue to remove tweets
     taskqueue.add(url='/cron/remove/tweets', params={'topic': topic})
     app.logger.info('Task created to remove tweets for {}'.format(topic))
 
+    mail.send_mail(
+        sender='jacoj82@gmail.com',
+        to='jacoj82@gmail.com',
+        subject='Cron topic {}'.format(topic),
+        body='Scraped {} tweets for topic {}'.format(cnt, topic),
+    )
+
+    app.logger.info('Scraped {} tweets for topic {}'.format(cnt, topic))
     return Response('OK')
 
 
@@ -181,11 +204,19 @@ def removeTweets():
     app.logger.info('Topic param received: {}'.format(topic))
 
     # delete old tweets (> 1 year)
-    Tweet.removeOld(datetime.datetime.utcnow() - datetime.timedelta(days=30), topic)
+    cnt = Tweet.removeOld(datetime.datetime.utcnow() - datetime.timedelta(days=30), topic)
 
+    # continue with scoring urls
     taskqueue.add(url='/cron/score/urls', params={'topic': topic})
-    app.logger.info('Task created to score urls for {}'.format(topic))
 
+    mail.send_mail(
+        sender='jacoj82@gmail.com',
+        to='jacoj82@gmail.com',
+        subject='Remove tweets {}'.format(topic),
+        body='{} tweets deleted for topic {}'.format(cnt, topic),
+    )
+
+    app.logger.info('{} tweets deleted for topic {}'.format(cnt, topic))
     return Response('OK')
 
 
@@ -225,6 +256,13 @@ def scoreUrls():
     taskqueue.add(url='/cron/delete/urls', params={'topic': topic})
     app.logger.info('Task created to delete urls for {}'.format(topic))
 
+    mail.send_mail(
+        sender='jacoj82@gmail.com',
+        to='jacoj82@gmail.com',
+        subject='Score urls {}'.format(topic),
+        body='{} tweets created {} urls'.format(len(tweets), len(urlScores)),
+    )
+
     app.logger.info('{} tweets created {} urls'.format(len(tweets), len(urlScores)))
     return Response('OK')
 
@@ -241,7 +279,15 @@ def deleteUrls():
         abort(400)
     app.logger.info('Topic param received: {}'.format(topic))
 
-    Link.removeOld(topic, datetime.datetime.utcnow() - datetime.timedelta(days=30))
+    cnt = Link.removeOld(topic, datetime.datetime.utcnow() - datetime.timedelta(days=30))
+
+    mail.send_mail(
+        sender='jacoj82@gmail.com',
+        to='jacoj82@gmail.com',
+        subject='Delete Urls {}'.format(topic),
+        body='Removed {} links for topic {}'.format(cnt, topic),
+    )
+
 
     return Response('OK')
 
@@ -258,7 +304,14 @@ def scheduleLinks():
         taskqueue.add(url='/cron/schedule/link', params={'topic': topic})
         app.logger.info('Created push queue to schedule link for {}'.format(topic))
 
-    app.logger.info('All topics pushed')
+    mail.send_mail(
+        sender='jacoj82@gmail.com',
+        to='jacoj82@gmail.com',
+        subject='Schedule Links',
+        body='All {} topics pushed'.format(len(topics)),
+    )
+
+    app.logger.info('All {} topics pushed'.format(len(topics)))
     return Response('OK')
 
 
@@ -278,14 +331,47 @@ def scheduleLink():
     users = User.fetchByTopic(topic)
 
     # get ordered links by topic
+    # two inequality filters not supported
+    week_ago = datetime.datetime.utcnow() - datetime.timedelta(days=7)
     links = Link.fetchByTopic(topic)
 
+    info = {}
     # for every user
     for user in users:
-        # get userlinks
-        userLinks = UserLink.fetchByUser(user)
-        # then loop through ordered links
-            # and assign first non-userlink to user
+        info[user.email] = None
 
-    # app.logger.info('{} tweets created {} urls'.format(len(tweets), len(urlScores)))
+        # get last userlink:
+        # if not read => skip
+        # if too soon => skip
+        lastUserLink = UserLink.findLastByUser(topic, user)
+        if lastUserLink and not hasattr(lastUserLink, 'read'):
+            app.logger.info('User has unread UserLink')
+            continue
+
+        # then loop through ordered links
+        for link in links:
+            # skip links that has been spammed
+            # ignore links created before a week ago
+            # these links will go away since updated_at will keep renewing
+            if link.created_at < week_ago:
+                app.logger.debug('Skipping spam link: {}'.format(link.id))
+                continue
+
+            # and assign first non-userlink to user
+            # note: search without topic:
+            # this gives unique link for a list of similar topics
+            if not UserLink.findByUserAndLink(user, link):
+                # assign new userlink to user for the topic
+                UserLink.create(topic, user, link)
+                info[user.email] = link.id
+                break
+
+    mail.send_mail(
+        sender='jacoj82@gmail.com',
+        to='jacoj82@gmail.com',
+        subject='Schedule Link {}'.format(topic),
+        body='\n'.join(['User {} got link {}'.format(userEmail, linkId) for userEmail, linkId in info.iteritems()]),
+    )
+
+    app.logger.info('{} users got links'.format(len(info)))
     return Response('OK')
