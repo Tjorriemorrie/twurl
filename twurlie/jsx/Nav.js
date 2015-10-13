@@ -10,7 +10,7 @@ var {
 
 var s = require('./styles');
 var Auth = require('./Auth');
-var MAin = require('./Main');
+var Main = require('./Main');
 var Article = require('./Article');
 var History = require('./History');
 
@@ -25,6 +25,10 @@ var Nav = React.createClass({
 		return state;
 	},
 
+	componentWillUnmount: function () {
+		console.info('[Nav] componentWillUnmount');
+	},
+
 	render: function () {
 		console.info('[Nav] render');
 		return (
@@ -33,7 +37,7 @@ var Nav = React.createClass({
 					<Text>twurlie</Text>
 				</View>
 				<Navigator
-					initialRoute={{idx: 0, title: 'topics'}}
+					initialRoute={{scene: 'main'}}
 					renderScene={this.renderScene}
 					/>
 			</View>
@@ -41,7 +45,7 @@ var Nav = React.createClass({
 	},
 
 	renderScene: function (route, nav) {
-		console.info('[Nav] renderScene: route [', route.idx, '] ', route.title);
+		console.info('[Nav] renderScene: route');
 
 		if (!this.state.auth) {
 			console.info('[Nav] renderScene: unauthorized');
@@ -49,7 +53,7 @@ var Nav = React.createClass({
 		}
 		else {
 
-			if (route.idx == 0) {
+			if (route.scene == 'main') {
 				console.info('[Nav] renderScene: main');
 				return <Main nav={nav} user_key={this.state.user_key}/>;
 			}

@@ -5,6 +5,6 @@ queue:
   bucket_size: 20
   max_concurrent_requests: 10
   retry_parameters:
-    task_age_limit: 21h
+    task_age_limit: 1h
     min_backoff_seconds: 10
     max_backoff_seconds: 320

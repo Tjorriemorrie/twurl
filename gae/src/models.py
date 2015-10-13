@@ -34,6 +34,12 @@ class User(ndb.Model):
         app.logger.info('Fetched {} users for topic {}'.format(len(users), topic))
         return users
 
+    @staticmethod
+    def fetchByKey(user_key):
+        user = ndb.Key(urlsafe=user_key).get()
+        app.logger.info('Fetched user {}'.format(user))
+        return user
+
 
 class Tweet(ndb.Model):
     id = ndb.StringProperty(required=True)

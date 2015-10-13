@@ -25,6 +25,10 @@ var Auth = React.createClass({
 		return state;
 	},
 
+	componentWillUnmount: function () {
+		console.info('[Auth] componentWillUnmount');
+	},
+
 	render: function () {
 		console.info('[Auth] render');
 		return (
@@ -80,32 +84,26 @@ var Auth = React.createClass({
 	authenticate: function () {
 		console.info('[Auth] authenticate', this.state.email, this.state.password);
 		this.setState({editable: false});
-		fetch(
-			c.host + '/user',
-			{
+		var data = new FormData();
+		data.append('email', this.state.email);
+		data.append('password', this.state.password);
+		fetch(c.host + '/user', {
 				method: 'POST',
-				headers: {
-					'Accept': 'application/json',
-					'Content-Type': 'application/json',
-					'Origin': '',
-					//'Host': 'api.producthunt.com'
-				},
-				body: JSON.stringify({
-					email: this.state.email,
-					password: this.state.password,
-				})
+				body: data,
 			})
-			.then((response) => response.text())
-			.then((responseText) => {
-				console.log(responseText);
-				this.props.setAuth(responseText);
+			.then(c.checkStatus)
+			.then(c.parseJSON)
+			.then((data) => {
+				console.log(data);
+				this.props.setAuth(data);
 			}).catch((error) => {
-				console.warn(error);
-				this.setState({'feedback': error});
+				console.warn(error.message);
+				this.setState({
+					feedback: error.message,
+					editable: true,
+				});
 			})
-			.finally(() => {
-				this.setState({editable: true});
-			});
+			.finally(() => {});
 	},
 
 });
