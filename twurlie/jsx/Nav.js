@@ -5,10 +5,12 @@ var {
 	Text,
 	View,
 	Navigator,
+	AsyncStorage,
 	} = React;
 
 
 var s = require('./styles');
+var c = require('./config');
 var Auth = require('./Auth');
 var Main = require('./Main');
 var Article = require('./Article');
@@ -18,11 +20,16 @@ var Nav = React.createClass({
 
 	getInitialState: function () {
 		var state = {
-			auth: null,
+			auth: false,
 			user_key: null,
 		};
 		console.info('[Nav] getInitialState:', state);
 		return state;
+	},
+
+	componentDidMount: function () {
+		console.info('[Nav] componentDidMount');
+		this._loadInitialState().done();
 	},
 
 	componentWillUnmount: function () {
@@ -65,10 +72,39 @@ var Nav = React.createClass({
 
 	setAuth: function (key) {
 		console.info('[Nav] setAuth:', key);
+		this._onAuth(key);
 		this.setState({
 			auth: true,
 			user_key: key,
 		});
+	},
+
+	// Async Storage
+
+	async _loadInitialState() {
+		console.info('[Nav] _loadInitialState');
+		try {
+			var user_key = await AsyncStorage.getItem(c.storage_user_key);
+			if (user_key !== null) {
+				this.setState({
+					auth: true,
+					user_key: user_key,
+				});
+			}
+		}
+		catch (error) {
+			console.error('AsyncStorage error: ' + error.message);
+		}
+	},
+
+	async _onAuth(user_key) {
+		console.info('[Nav] _onAuth', user_key);
+		try {
+			await AsyncStorage.setItem(c.storage_user_key, user_key);
+		}
+		catch (error) {
+			console.error('AsyncStorage error: ' + error.message);
+		}
 	},
 
 });

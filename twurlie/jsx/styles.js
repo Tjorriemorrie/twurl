@@ -23,9 +23,25 @@ var styles = StyleSheet.create({
 		height: 40,
 	},
 
-	topicSection: {
+
+	topicView: {
+		backgroundColor: '#eeeeee',
+	},
+	topicText: {
+		fontWeight: 'bold',
+	},
+	linkBox: {
 
 	},
+	linkUrlView: {},
+	linkUrlText: {},
+	linkPriorityView: {},
+	linkPriorityText: {},
+	linkReadAtView: {},
+	linkRatedAtText: {},
+	linkTweetedCountView: {},
+	linkTweetedCountText: {},
+
 
 	load: {
 		color: 'white',

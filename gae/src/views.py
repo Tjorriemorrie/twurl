@@ -37,6 +37,7 @@ def user():
 @jsonapi
 def userMain():
 
+    # todo ensure twurlie is topic if none
     data = {}
 
     # get user

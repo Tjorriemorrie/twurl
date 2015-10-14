@@ -2,8 +2,10 @@
 
 var config = {
 
-	'host': 'http://10.0.2.2:9999',
+	host: 'http://10.0.2.2:9999',
 	//'host': 'https://twurlie-1091.appspot.com',
+	storage_user_key: 'twurlie_user_key',
+	storage_user_data: 'twurlie_user_data',
 
 	checkStatus: function (response) {
 		//console.debug(response.headers);
@@ -24,6 +26,12 @@ var config = {
 
 	parseJSON: function (response) {
 		return response.json();
+	},
+
+	mapObject: function (obj, callback) {
+		return Object.keys(obj).map(function (key) {
+			return callback(key, obj[key]);
+		});
 	},
 
 };

@@ -5,6 +5,7 @@ var {
 	TouchableHighlight,
 	View,
 	Text,
+	AsyncStorage,
 } = React;
 
 
@@ -24,7 +25,7 @@ var Main = React.createClass({
 
 	componentDidMount: function () {
 		console.info('[Main] componentDidMount');
-		this.loadData();
+		this._loadData().done();
 	},
 
 	componentWillUnmount: function () {
@@ -38,11 +39,45 @@ var Main = React.createClass({
 				<View>
 					<Text>{this.state.message}</Text>
 				</View>
-				<View style={s.topicSection}>
-					<Text></Text>
-				</View>
+				{this.renderTopics()}
 			</View>
 		);
+	},
+
+	renderTopics: function () {
+		console.info('[Main] renderTopics');
+		if (this.state.data) {
+			return <View>
+				{c.mapObject(this.state.data, function(key, val) {
+					return (
+						<View style={s.topicView} key={key}>
+							<Text style={s.topicText}>{key}</Text>
+							{this.renderLink(val)}
+						</View>
+					);
+				}.bind(this))}
+			</View>;
+		}
+	},
+
+	renderLink: function (link) {
+		console.info('[Main] renderLink');
+		if (link) {
+			return <View style={s.linkBox}>
+				<View style={s.linkUrlView}>
+					<Text style={s.linkUrlText}>{link.link_id}</Text>
+				</View>
+				<View style={s.linkPriorityView}>
+					<Text style={s.linkPriorityText}>{link.priority}</Text>
+				</View>
+				<View style={s.linkReadAtView}>
+					<Text style={s.linkReadAtText}>{link.read_at}</Text>
+				</View>
+				<View style={s.linkTweetedCountView}>
+					<Text style={s.linkTweetedCountText}>{link.tweeted_count}</Text>
+				</View>
+			</View>;
+		}
 	},
 
 	loadData: function () {
@@ -57,15 +92,48 @@ var Main = React.createClass({
 			.then(c.parseJSON)
 			.then((data) => {
 				console.log(data);
+				this._saveData(data);
 				this.setState({
 					data: data,
-					message: 'Done and done',
+					message: 'You have ' + Object.keys(data).length + ' topics',
 				});
 			}).catch((error) => {
 				console.warn(error);
 				this.setState({message: error});
 			})
 			.finally(() => {});
+	},
+
+	// Async Storage
+
+	async _loadData() {
+		console.info('[Main] _loadData');
+		try {
+			var user_data = await AsyncStorage.getItem(c.storage_user_data);
+			if (user_data !== null) {
+				console.info('[Main] _loadData: data found!');
+				this.setState({
+					data: JSON.parse(user_data),
+				});
+			}
+			else {
+				console.info('[Main] _loadData: no data found, loading...');
+				this.loadData();
+			}
+		}
+		catch (error) {
+			console.error('AsyncStorage error: ' + error.message);
+		}
+	},
+
+	async _saveData(user_data) {
+		console.info('[Main] _saveData', user_data);
+		try {
+			await AsyncStorage.setItem(c.storage_user_data, JSON.stringify(user_data));
+		}
+		catch (error) {
+			console.error('AsyncStorage error: ' + error.message);
+		}
 	},
 
 });
