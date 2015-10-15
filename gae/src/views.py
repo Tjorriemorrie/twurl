@@ -49,6 +49,7 @@ def userMain():
     for topic in user.topics:
         userLink = UserLink.findLastByUser(topic, user)
         data[topic] = {
+            'key': userLink.key.urlsafe(),
             'link_id': userLink.link_id,
             'tweeted_count': userLink.tweeted_count,
             'priority': userLink.priority,
@@ -56,6 +57,24 @@ def userMain():
         }
 
     return data
+
+
+@app.route('/user/read', methods=['GET', 'POST'])
+@jsonapi
+def userRead():
+
+    # get user
+    app.logger.info('formdata {}'.format(request.form))
+    user_key = request.form.get('user_key')
+    user = User.fetchByKey(user_key)
+    if not user:
+        abort(404)
+
+    # mark last link
+    topic = request.form.get('topic')
+    userLink = UserLink.readLastByUser(topic, user)
+
+    return userLink.read_at
 
 
 @app.route('/topic/create')
@@ -122,6 +141,7 @@ def scheduleLink():
     week_ago = datetime.datetime.utcnow() - datetime.timedelta(days=7)
     links = Link.fetchByTopic(topic)
 
+    spamLinks = []
     info = {}
     # for every user
     for user in users:
@@ -142,6 +162,7 @@ def scheduleLink():
             # these links will go away since updated_at will keep renewing
             if link.created_at < week_ago:
                 app.logger.debug('Skipping spam link: {}'.format(link.id))
+                spamLinks.append(link.id)
                 continue
 
             # and assign first non-userlink to user
@@ -153,11 +174,13 @@ def scheduleLink():
                 info[user.email] = link.id
                 break
 
+    body = '\n'.join(['User {} got link {}'.format(userEmail, linkId) for userEmail, linkId in info.iteritems()])
+    body += '\n'.join(spamLinks)
     mail.send_mail(
         sender='jacoj82@gmail.com',
         to='jacoj82@gmail.com',
         subject='Schedule Link {}'.format(topic),
-        body='\n'.join(['User {} got link {}'.format(userEmail, linkId) for userEmail, linkId in info.iteritems()]),
+        body=body,
     )
 
     app.logger.info('{} users got links'.format(len(info)))

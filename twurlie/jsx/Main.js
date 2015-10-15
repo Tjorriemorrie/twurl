@@ -11,6 +11,7 @@ var {
 
 var s = require('./styles');
 var c = require('./config');
+var Moment = require('moment');
 
 var Main = React.createClass({
 
@@ -52,7 +53,7 @@ var Main = React.createClass({
 					return (
 						<View style={s.topicView} key={key}>
 							<Text style={s.topicText}>{key}</Text>
-							{this.renderLink(val)}
+							{this.renderLink(key, val)}
 						</View>
 					);
 				}.bind(this))}
@@ -60,24 +61,55 @@ var Main = React.createClass({
 		}
 	},
 
-	renderLink: function (link) {
+	renderLink: function (topic, link) {
 		console.info('[Main] renderLink');
 		if (link) {
 			return <View style={s.linkBox}>
 				<View style={s.linkUrlView}>
-					<Text style={s.linkUrlText}>{link.link_id}</Text>
+					<Text style={s.linkUrlText}>URL: {link.link_id}</Text>
 				</View>
+				<TouchableHighlight style={s.linkUrlView} onPress={this.read.bind(this, topic, link)}>
+					<Text style={s.linkUrlText}>Read now!</Text>
+				</TouchableHighlight>
 				<View style={s.linkPriorityView}>
-					<Text style={s.linkPriorityText}>{link.priority}</Text>
+					<Text style={s.linkPriorityText}>Priority: {link.priority}</Text>
 				</View>
 				<View style={s.linkReadAtView}>
-					<Text style={s.linkReadAtText}>{link.read_at}</Text>
+					<Text style={s.linkReadAtText}>Read at: {link.read_at}</Text>
 				</View>
 				<View style={s.linkTweetedCountView}>
-					<Text style={s.linkTweetedCountText}>{link.tweeted_count}</Text>
+					<Text style={s.linkTweetedCountText}>Tweeted: {link.tweeted_count}</Text>
 				</View>
 			</View>;
 		}
+	},
+
+	read: function (topic, link) {
+		console.info('[Main] read topic', topic);
+		console.info('[Main] read link', link);
+
+		// update state
+		var form_data = new FormData();
+		form_data.append('user_key', this.props.user_key);
+		form_data.append('topic', topic);
+		fetch(c.host + '/user/read', {
+				method: 'POST',
+				body: form_data,
+			})
+			.then(c.checkStatus)
+			.then(c.parseJSON)
+			.then((read_at) => {
+				console.info('[Main] read at: ', read_at);
+				var data = this.state.data;
+				data[topic]['read_at'] = read_at;
+				this._saveData(data);
+				this.setState({data: data});
+			}).catch((error) => {
+				console.warn(error);
+			});
+
+		// render webview
+		this.props.nav.push({scene: 'read', link_id: link.link_id});
 	},
 
 	loadData: function () {
@@ -112,8 +144,10 @@ var Main = React.createClass({
 			var user_data = await AsyncStorage.getItem(c.storage_user_data);
 			if (user_data !== null) {
 				console.info('[Main] _loadData: data found!');
+				var data = JSON.parse(user_data);
 				this.setState({
-					data: JSON.parse(user_data),
+					data: data,
+					message: 'You have ' + Object.keys(data).length + ' topics',
 				});
 			}
 			else {

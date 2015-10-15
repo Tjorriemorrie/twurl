@@ -287,3 +287,17 @@ class UserLink(ndb.Model):
         app.logger.debug('Found last userlink for user and topic: {}'.format(userLink))
         return userLink
 
+    @staticmethod
+    def readLastByUser(topic, user):
+        userLink = UserLink.query(
+            UserLink.user_key == user.key,
+            ancestor=ndb.Key('Topic', topic)
+        ).get()
+        if not userLink:
+            raise Exception('No userlink found')
+        read_at = datetime.datetime.utcnow()
+        userLink.read_at = read_at
+        userLink.put()
+        app.logger.debug('Marked as read last userlink: {} {}'.format(userLink.key, read_at))
+        return userLink
+

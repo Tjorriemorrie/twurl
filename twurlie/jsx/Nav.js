@@ -64,6 +64,10 @@ var Nav = React.createClass({
 				console.info('[Nav] renderScene: main');
 				return <Main nav={nav} user_key={this.state.user_key}/>;
 			}
+			else if (route.scene == 'read') {
+				console.info('[Nav] renderScene: read', route.link_id);
+
+			}
 			else {
 				console.error('[Nav] renderScene: unknown route!', route);
 			}
