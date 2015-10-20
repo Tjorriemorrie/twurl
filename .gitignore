@@ -58,3 +58,6 @@ target/
 
 .idea/
 
+# node modules
+twurlie/node_modules/
+node_modules/
