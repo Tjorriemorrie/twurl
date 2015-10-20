@@ -1,5 +1,5 @@
 from src import app
-from flask import request, render_template, json, Response, abort
+from flask import request, render_template, json, Response, abort, redirect
 from models import User, Tweet, Link, UserLink
 import urllib
 import base64
@@ -7,14 +7,43 @@ from google.appengine.api import urlfetch, taskqueue, mail
 import datetime
 import math
 from flask.ext.jsontools import jsonapi
+import urlparse
+import oauth2 as oauth
 
 
 @app.route('/')
 def index():
+    token = obtainRequestToken()
     params = {
     }
     app.logger.info('index: {}'.format(params))
     return render_template('index.html', **params)
+
+
+def obtainRequestToken():
+    app.logger.info('Obtaining request token')
+
+    app.logger.info('Creating oauth consumer...')
+    consumer = oauth.Consumer(app.config['CONSUMER_KEY'], app.config['CONSUMER_SECRET'])
+
+    app.logger.info('Creating oauth client...')
+    client = oauth.Client(consumer)
+
+    app.logger.info('Requesting token from twitter...')
+    resp, content = client.request(app.config['REQUEST_TOKEN_URL'], 'GET')
+    if resp['status'] != '200':
+        raise Exception("Invalid response %s." % resp['status'])
+
+    request_token = dict(urlparse.parse_qsl(content))
+    app.logger.info('Request token received: {}'.format(request_token))
+    return request_token
+
+
+@app.route('/twitter_callback')
+def twitterCallback():
+    form_data = request.form
+    app.logger.info('form_data: {}'.format(form_data))
+    return redirect('/')
 
 
 ###########################################
@@ -206,11 +235,6 @@ def scheduleLink():
 
 @app.route('/cron/topics', methods=['GET', 'POST'])
 def cronTopics():
-
-    consumer_key = 'G8v4IHt7misK6qliT5eH3p1Rp'
-    consumer_secret = 'uw3O4u9GXTdS53aS9KEDuSsdbiOLV0kN7MK3H7ZpawbM7yWHh5'
-    access_token_key = '22895708-O5NdDSJRKxtuTIWrAGxpNaWPKUHG1CTj8QJbjjilS'
-    access_token_secret = 'sx2KjzCWxPCDOmQhe4cQrYQpT3Y6w0algyBcUaKzMBZXt'
 
     # res = urlfetch.fetch(
     #     url='https://api.twitter.com/oauth2/token',
