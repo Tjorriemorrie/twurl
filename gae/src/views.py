@@ -14,7 +14,7 @@ def index():
     params = {
     }
     app.logger.info('index: {}'.format(params))
-    return render_template('base.html', **params)
+    return render_template('index.html', **params)
 
 
 ###########################################

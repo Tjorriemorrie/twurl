@@ -58,3 +58,5 @@ target/
 
 .idea/
 
+# ignore npm modules
+node_modules/
