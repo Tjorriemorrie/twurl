@@ -62,7 +62,7 @@ var Main = React.createClass({
 	},
 
 	renderLink: function (topic, link) {
-		console.info('[Main] renderLink');
+		console.info('[Main] renderLink', topic, link);
 		if (link) {
 			return <View style={s.linkBox}>
 				<View style={s.linkUrlView}>
@@ -82,34 +82,18 @@ var Main = React.createClass({
 				</View>
 			</View>;
 		}
+		else {
+			return <View style={s.linkBox}>
+				<Text>No link; please wait a day</Text>
+			</View>;
+		}
 	},
 
 	read: function (topic, link) {
 		console.info('[Main] read topic', topic);
-		console.info('[Main] read link', link);
+		console.info('[Main] read link_id', link.link_id);
+		this.props.nav.push({scene: 'read', topic: topic, link_id: link.link_id});
 
-		// update state
-		var form_data = new FormData();
-		form_data.append('user_key', this.props.user_key);
-		form_data.append('topic', topic);
-		fetch(c.host + '/user/read', {
-				method: 'POST',
-				body: form_data,
-			})
-			.then(c.checkStatus)
-			.then(c.parseJSON)
-			.then((read_at) => {
-				console.info('[Main] read at: ', read_at);
-				var data = this.state.data;
-				data[topic]['read_at'] = read_at;
-				this._saveData(data);
-				this.setState({data: data});
-			}).catch((error) => {
-				console.warn(error);
-			});
-
-		// render webview
-		this.props.nav.push({scene: 'read', link_id: link.link_id});
 	},
 
 	loadData: function () {

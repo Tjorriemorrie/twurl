@@ -44,17 +44,22 @@ def userMain():
     app.logger.info('formdata {}'.format(request.form))
     user_key = request.form.get('user_key')
     user = User.fetchByKey(user_key)
+    if not user:
+        abort(403)
 
     # get last userlink per topic
     for topic in user.topics:
         userLink = UserLink.findLastByUser(topic, user)
-        data[topic] = {
-            'key': userLink.key.urlsafe(),
-            'link_id': userLink.link_id,
-            'tweeted_count': userLink.tweeted_count,
-            'priority': userLink.priority,
-            'read_at': hasattr(userLink, 'read_at') and userLink.read_at
-        }
+        if userLink:
+            data[topic] = {
+                'key': userLink.key.urlsafe(),
+                'link_id': userLink.link_id,
+                'tweeted_count': userLink.tweeted_count,
+                'priority': userLink.priority,
+                'read_at': hasattr(userLink, 'read_at') and userLink.read_at
+            }
+        else:
+            data[topic] = None
 
     return data
 
@@ -68,7 +73,7 @@ def userRead():
     user_key = request.form.get('user_key')
     user = User.fetchByKey(user_key)
     if not user:
-        abort(404)
+        abort(403)
 
     # mark last link
     topic = request.form.get('topic')
@@ -274,12 +279,12 @@ def removeTweets():
     # continue with deleting urls
     taskqueue.add(url='/cron/delete/urls', params={'topic': topic})
 
-    mail.send_mail(
-        sender='jacoj82@gmail.com',
-        to='jacoj82@gmail.com',
-        subject='Remove tweets {}'.format(topic),
-        body='{} tweets deleted for topic {}'.format(cnt, topic),
-    )
+    # mail.send_mail(
+    #     sender='jacoj82@gmail.com',
+    #     to='jacoj82@gmail.com',
+    #     subject='Remove tweets {}'.format(topic),
+    #     body='{} tweets deleted for topic {}'.format(cnt, topic),
+    # )
 
     app.logger.info('{} tweets deleted for topic {}'.format(cnt, topic))
     return Response('OK')
@@ -302,12 +307,12 @@ def deleteUrls():
     # continue with scoring urls
     taskqueue.add(url='/cron/score/urls', params={'topic': topic})
 
-    mail.send_mail(
-        sender='jacoj82@gmail.com',
-        to='jacoj82@gmail.com',
-        subject='Delete Urls {}'.format(topic),
-        body='Removed {} links for topic {}'.format(cnt, topic),
-    )
+    # mail.send_mail(
+    #     sender='jacoj82@gmail.com',
+    #     to='jacoj82@gmail.com',
+    #     subject='Delete Urls {}'.format(topic),
+    #     body='Removed {} links for topic {}'.format(cnt, topic),
+    # )
 
 
     return Response('OK')
@@ -338,11 +343,13 @@ def scoreUrls():
                     'retweeted_sum': 0.,
                     'favorite_sum': 0.,
                 }
-            # app.logger.debug(tweet)
+                app.logger.debug('Url added: {}'.format(url))
             urlScores[url]['tweeted_count'] += 1
             urlScores[url]['retweeted_sum'] += math.log(max(1, tweet.retweet_count))
             urlScores[url]['favorite_sum'] += math.log(max(1, tweet.favorite_count))
+    app.logger.info('All {} tweets parsed and found {} urls'.format(len(tweets), len(urlScores)))
 
+    app.logger.info('Saving urls...')
     for url, url_info in urlScores.iteritems():
         link = Link.create(topic, url, url_info)
 
@@ -357,7 +364,7 @@ def scoreUrls():
         body='{} tweets created {} urls'.format(len(tweets), len(urlScores)),
     )
 
-    app.logger.info('{} tweets created {} urls'.format(len(tweets), len(urlScores)))
+    app.logger.info('Scoring urls done for {}'.format(topic))
     return Response('OK')
 
 
@@ -407,7 +414,8 @@ def cronTopic():
     app.logger.info(res)
 
     cnt = 0
-    while True:
+    max_cnt = 90 if app.config['DEBUG'] else 1222333
+    while cnt < max_cnt:
         content = json.loads(res.content)
         metadata = content['search_metadata']
         statuses = content['statuses']

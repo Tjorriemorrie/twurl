@@ -2,6 +2,7 @@
 
 var React = require('react-native');
 var {
+	AsyncStorage,
 	TouchableHighlight,
 	View,
 	Text,
@@ -16,13 +17,18 @@ var Auth = React.createClass({
 
 	getInitialState: function () {
 		var state = {
-			email: 'jacoj82@gmail.com',
-			password: 'wtf',
+			email: '',
+			password: '',
 			editable: true,
 			feedback: '',
 		};
 		console.info('[Auth] getInitialState:', state);
 		return state;
+	},
+
+	componentDidMount: function () {
+		console.info('[Auth] componentDidMount');
+		this._loadData().done();
 	},
 
 	componentWillUnmount: function () {
@@ -84,6 +90,7 @@ var Auth = React.createClass({
 	authenticate: function () {
 		console.info('[Auth] authenticate', this.state.email, this.state.password);
 		this.setState({editable: false});
+		this._saveData(this.state.email);
 		var data = new FormData();
 		data.append('email', this.state.email);
 		data.append('password', this.state.password);
@@ -106,6 +113,33 @@ var Auth = React.createClass({
 			.finally(() => {});
 	},
 
+	// Async Storage
+
+	async _loadData() {
+		console.info('[Auth] _loadData');
+		try {
+			var user_email = await AsyncStorage.getItem(c.storage_user_email);
+			if (user_email !== null) {
+				console.info('[Auth] _loadData: data found!');
+				this.setState({
+					email: user_email,
+				});
+			}
+		}
+		catch (error) {
+			console.error('AsyncStorage error: ' + error.message);
+		}
+	},
+
+	async _saveData(user_email) {
+		console.info('[Auth] _saveData', user_email);
+		try {
+			await AsyncStorage.setItem(c.storage_user_email, user_email);
+		}
+		catch (error) {
+			console.error('AsyncStorage error: ' + error.message);
+		}
+	},
 });
 
 

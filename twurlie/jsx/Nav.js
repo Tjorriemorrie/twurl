@@ -6,6 +6,7 @@ var {
 	View,
 	Navigator,
 	AsyncStorage,
+	TouchableHighlight,
 	} = React;
 
 
@@ -13,7 +14,7 @@ var s = require('./styles');
 var c = require('./config');
 var Auth = require('./Auth');
 var Main = require('./Main');
-var Article = require('./Article');
+var Read = require('./Read');
 var History = require('./History');
 
 var Nav = React.createClass({
@@ -42,6 +43,9 @@ var Nav = React.createClass({
 			<View style={[s.container]}>
 				<View style={[s.toolbar]}>
 					<Text>twurlie</Text>
+					<TouchableHighlight style={s.btn} onPress={this.setAuth.bind(this, null)}>
+						<Text>log out</Text>
+					</TouchableHighlight>
 				</View>
 				<Navigator
 					initialRoute={{scene: 'main'}}
@@ -66,7 +70,7 @@ var Nav = React.createClass({
 			}
 			else if (route.scene == 'read') {
 				console.info('[Nav] renderScene: read', route.link_id);
-
+				return <Read nav={nav} user_key={this.state.user_key} topic={route.topic} link_id={route.link_id}/>;
 			}
 			else {
 				console.error('[Nav] renderScene: unknown route!', route);
@@ -78,9 +82,13 @@ var Nav = React.createClass({
 		console.info('[Nav] setAuth:', key);
 		this._onAuth(key);
 		this.setState({
-			auth: true,
+			auth: !!key,
 			user_key: key,
 		});
+		if (!key) {
+			console.warn('No key provided, clearing storage!');
+			AsyncStorage.clear();
+		}
 	},
 
 	// Async Storage

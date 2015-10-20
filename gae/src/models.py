@@ -16,7 +16,7 @@ class User(ndb.Model):
         app.logger.info('[User] Authenticating {}'.format(email))
         user = User.query(User.email == email).get()
         if not user:
-            user = User(email=email, password=password, topics=['twurlie'])
+            user = User(email=email, password=password, topics=['twurlie', 'python'])
             user.put()
             app.logger.info('User created')
         else:
@@ -211,7 +211,10 @@ class Link(ndb.Model):
         if link.tweeted_count != url_info['tweeted_count']:
             link.populate(**url_info)
             link.put()
-        # app.logger.debug('Link: {}'.format(link))
+            app.logger.debug('Link updated: {}'.format(link))
+        else:
+            app.logger.debug('Link created: {}'.format(link))
+
         return link
 
     @staticmethod

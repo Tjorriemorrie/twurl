@@ -30,9 +30,7 @@ var styles = StyleSheet.create({
 	topicText: {
 		fontWeight: 'bold',
 	},
-	linkBox: {
-
-	},
+	linkBox: {},
 	linkUrlView: {},
 	linkUrlText: {},
 	linkPriorityView: {},
@@ -50,6 +48,8 @@ var styles = StyleSheet.create({
 	},
 
 	toolbar: {
+		//flex: 1,
+		//flexDirection: 'row',
 		backgroundColor: 'blue',
 		height: 60,
 		borderWidth: 10,
@@ -73,7 +73,13 @@ var styles = StyleSheet.create({
 		width: 200,
 		borderWidth: 1,
 		borderColor: 'black',
-	}
+	},
+
+
+	webView: {
+		backgroundColor: 'grey',
+		height: 350,
+	},
 
 });
 
