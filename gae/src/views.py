@@ -21,8 +21,7 @@ def index():
 # USER
 ###########################################
 
-@app.route('/user', methods=['GET', 'POST'])
-@jsonapi
+@app.route('/user', methods=['GET', 'POST'])@jsonapi
 def user():
     app.logger.info('formdata {}'.format(request.form))
     email = request.form.get('email')
