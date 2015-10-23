@@ -13,7 +13,7 @@ indexes:
 - kind: Link
   ancestor: yes
   properties:
-  - name: priority
+  - name: tweet_count
     direction: desc
 
 - kind: Link

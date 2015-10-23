@@ -21,8 +21,10 @@ def index():
 # USER
 ###########################################
 
-@app.route('/user', methods=['GET', 'POST'])@jsonapi
+@app.route('/user', methods=['GET', 'POST'])
+@jsonapi
 def user():
+    app.logger.info('args {}'.format(request.args))
     app.logger.info('formdata {}'.format(request.form))
     email = request.form.get('email')
     password = request.form.get('password')
@@ -35,9 +37,8 @@ def user():
 @app.route('/user/main', methods=['GET', 'POST'])
 @jsonapi
 def userMain():
-
     # todo ensure twurlie is topic if none
-    data = {}
+    data = []
 
     # get user
     app.logger.info('formdata {}'.format(request.form))
@@ -50,23 +51,26 @@ def userMain():
     for topic in user.topics:
         userLink = UserLink.findLastByUser(topic, user)
         if userLink:
-            data[topic] = {
+            data.append({
+                'topic': topic,
                 'key': userLink.key.urlsafe(),
                 'link_id': userLink.link_id,
                 'tweeted_count': userLink.tweeted_count,
                 'priority': userLink.priority,
                 'read_at': hasattr(userLink, 'read_at') and userLink.read_at
-            }
+            })
         else:
-            data[topic] = None
+            data.append({
+                'topic': topic,
+            })
 
+    app.logger.info('Data: {}'.format(data))
     return data
 
 
 @app.route('/user/read', methods=['GET', 'POST'])
 @jsonapi
 def userRead():
-
     # get user
     app.logger.info('formdata {}'.format(request.form))
     user_key = request.form.get('user_key')
@@ -102,7 +106,7 @@ def topicCreate():
 # 1st create task queue for every topic
 # 2nd link every user's every topic
 
-@app.route('/cron/schedule/links', methods=['GET', 'POST'])
+@app.route('/cron/schedule/links')
 def scheduleLinks():
     ''' Run this after quota reset '''
     # get topics
@@ -125,14 +129,10 @@ def scheduleLinks():
     return Response('OK')
 
 
-@app.route('/cron/schedule/link', methods=['GET', 'POST'])
+@app.route('/cron/schedule/link', methods=['POST'])
 def scheduleLink():
-    if request.method == 'POST':
-        app.logger.info('request form: {}'.format(request.form))
-        topic = request.form.get('topic')
-    elif request.method == 'GET':
-        app.logger.info('request args: {}'.format(request.args))
-        topic = request.args.get('topic')
+    app.logger.info('request form: {}'.format(request.form))
+    topic = request.form.get('topic')
     if not topic:
         abort(400)
     app.logger.info('Topic param received: {}'.format(topic))
@@ -157,6 +157,7 @@ def scheduleLink():
         lastUserLink = UserLink.findLastByUser(topic, user)
         if lastUserLink and not hasattr(lastUserLink, 'read'):
             app.logger.info('User has unread UserLink')
+            info[user.email] = 'User has unread UserLink'
             continue
 
         # then loop through ordered links
@@ -178,7 +179,7 @@ def scheduleLink():
                 info[user.email] = link.id
                 break
 
-    body = '\n'.join(['User {} got link {}'.format(userEmail, linkId) for userEmail, linkId in info.iteritems()])
+    body = '\n'.join(['{}: {}'.format(userEmail, linkId) for userEmail, linkId in info.iteritems()])
     body += '\n'.join(spamLinks)
     mail.send_mail(
         sender='jacoj82@gmail.com',
@@ -186,6 +187,7 @@ def scheduleLink():
         subject='Schedule Link {}'.format(topic),
         body=body,
     )
+    app.logger.info(body)
 
     app.logger.info('{} users got links'.format(len(info)))
     return Response('OK')
@@ -197,15 +199,13 @@ def scheduleLink():
 # NB this is run last as the quota will never be sufficient
 # remember to set timeout on task queue so it does not carry over reset
 # 1st is to create task queues for every topic
-# 2nd remove expired tweets (hold about 1 month - depends on datastore size)
+# 2nd remove expired tweets (hold about 12 months - depends on datastore size)
 # 3rd delete expired urls/links (hold about 1 month (created between 7 days and 1 months is spam)
 # 4th score the urls based on tweets and retweets
 
-# 2nd link every user's every topic
 
-@app.route('/cron/topics', methods=['GET', 'POST'])
+@app.route('/cron/topics')
 def cronTopics():
-
     consumer_key = 'G8v4IHt7misK6qliT5eH3p1Rp'
     consumer_secret = 'uw3O4u9GXTdS53aS9KEDuSsdbiOLV0kN7MK3H7ZpawbM7yWHh5'
     access_token_key = '22895708-O5NdDSJRKxtuTIWrAGxpNaWPKUHG1CTj8QJbjjilS'
@@ -243,40 +243,36 @@ def cronTopics():
     app.logger.info('Topics fetched: {}'.format(topics))
 
     for topic in topics:
-        # get since ID
-        since_id = Tweet.since_id(topic)
-        params = {'topic': topic, 'since_id': since_id}
-        app.logger.info('Created push queue for {}'.format(params))
+        params = {'topic': topic}
+        app.logger.info('Scheduled remove tweets for {}'.format(params))
         taskqueue.add(url='/cron/remove/tweets', params=params)
 
     mail.send_mail(
         sender='jacoj82@gmail.com',
         to='jacoj82@gmail.com',
         subject='Cron Topics',
-        body='All {} topics pushed'.format(len(topics)),
+        body='All {} topics pushed: {}'.format(len(topics), topics),
     )
 
     app.logger.info('All {} topics pushed'.format(len(topics)))
     return Response('OK')
 
 
-@app.route('/cron/remove/tweets', methods=['GET', 'POST'])
+@app.route('/cron/remove/tweets', methods=['POST'])
 def removeTweets():
-    if request.method == 'POST':
-        app.logger.info('request form: {}'.format(request.form))
-        topic = request.form.get('topic')
-    elif request.method == 'GET':
-        app.logger.info('request args: {}'.format(request.args))
-        topic = request.args.get('topic')
+    app.logger.info('request form: {}'.format(request.form))
+    topic = request.form.get('topic')
     if not topic:
         abort(400)
     app.logger.info('Topic param received: {}'.format(topic))
 
     # delete old tweets (> 1 year)
-    cnt = Tweet.removeOld(datetime.datetime.utcnow() - datetime.timedelta(days=30), topic)
+    cnt = Tweet.removeOld(datetime.datetime.utcnow() - datetime.timedelta(days=360), topic)
 
     # continue with deleting urls
-    taskqueue.add(url='/cron/delete/urls', params={'topic': topic})
+    params = {'topic': topic}
+    app.logger.info('Scheduled delete urls for {}'.format(params))
+    taskqueue.add(url='/cron/delete/urls', params=params)
 
     # mail.send_mail(
     #     sender='jacoj82@gmail.com',
@@ -289,14 +285,10 @@ def removeTweets():
     return Response('OK')
 
 
-@app.route('/cron/delete/urls', methods=['GET', 'POST'])
+@app.route('/cron/delete/urls', methods=['POST'])
 def deleteUrls():
-    if request.method == 'POST':
-        app.logger.info('request form: {}'.format(request.form))
-        topic = request.form.get('topic')
-    elif request.method == 'GET':
-        app.logger.info('request args: {}'.format(request.args))
-        topic = request.args.get('topic')
+    app.logger.info('request form: {}'.format(request.form))
+    topic = request.form.get('topic')
     if not topic:
         abort(400)
     app.logger.info('Topic param received: {}'.format(topic))
@@ -304,7 +296,9 @@ def deleteUrls():
     cnt = Link.removeOld(topic, datetime.datetime.utcnow() - datetime.timedelta(days=30))
 
     # continue with scoring urls
-    taskqueue.add(url='/cron/score/urls', params={'topic': topic})
+    params = {'topic': topic}
+    app.logger.info('Scheduled scraping topic for {}'.format(params))
+    taskqueue.add(url='/cron/topic', params={'topic': topic})
 
     # mail.send_mail(
     #     sender='jacoj82@gmail.com',
@@ -313,142 +307,98 @@ def deleteUrls():
     #     body='Removed {} links for topic {}'.format(cnt, topic),
     # )
 
-
+    app.logger.info('{} urls deleted for topic {}'.format(cnt, topic))
     return Response('OK')
 
 
-@app.route('/cron/score/urls', methods=['GET', 'POST'])
-def scoreUrls():
-    if request.method == 'POST':
-        app.logger.info('request form: {}'.format(request.form))
-        topic = request.form.get('topic')
-    elif request.method == 'GET':
-        app.logger.info('request args: {}'.format(request.args))
-        topic = request.args.get('topic')
-    if not topic:
-        abort(400)
-    app.logger.info('Topic param received: {}'.format(topic))
-
-    tweets = Tweet.fetchByTopic(topic)
-
-    # group by url and add score
-    urlScores = {}
-    for tweet in tweets:
-        for url in tweet.urls:
-            if url not in urlScores:
-                urlScores[url] = {
-                    'id': url,
-                    'tweeted_count': 0,
-                    'retweeted_sum': 0.,
-                    'favorite_sum': 0.,
-                }
-                app.logger.debug('Url added: {}'.format(url))
-            urlScores[url]['tweeted_count'] += 1
-            urlScores[url]['retweeted_sum'] += math.log(max(1, tweet.retweet_count))
-            urlScores[url]['favorite_sum'] += math.log(max(1, tweet.favorite_count))
-    app.logger.info('All {} tweets parsed and found {} urls'.format(len(tweets), len(urlScores)))
-
-    app.logger.info('Saving urls...')
-    for url, url_info in urlScores.iteritems():
-        link = Link.create(topic, url, url_info)
-
-    # continue to scrape for new tweets
-    taskqueue.add(url='/cron/topic', params={'topic': topic})
-    app.logger.info('Task created to scrape for new tweets for {}'.format(topic))
-
-    mail.send_mail(
-        sender='jacoj82@gmail.com',
-        to='jacoj82@gmail.com',
-        subject='Score urls {}'.format(topic),
-        body='{} tweets created {} urls'.format(len(tweets), len(urlScores)),
-    )
-
-    app.logger.info('Scoring urls done for {}'.format(topic))
-    return Response('OK')
-
-
-@app.route('/cron/topic', methods=['GET', 'POST'])
+@app.route('/cron/topic', methods=['POST'])
 def cronTopic():
-
-    access_token = 'AAAAAAAAAAAAAAAAAAAAABcJYAAAAAAAVviSzyKtPYqYlHpZxoim6DHvfjI%3DU0slNkvBKQRynT62gbvQjEhAlE2PvzVZNia99xAdoJweI2OLqe'
-
-    if request.method == 'POST':
-        app.logger.info('request form: {}'.format(request.form))
-        topic = request.form.get('topic')
-    elif request.method == 'GET':
-        app.logger.info('request args: {}'.format(request.args))
-        topic = request.args.get('topic')
-    if not topic:
-        abort(400)
-
-    since_id = request.form.get('since_id')
-    app.logger.info('Topic params received: {} {}'.format(topic, since_id))
-
     # Requests / 15-min window (user auth)  180
     # Requests / 15-min window (app auth)   450
     # 450 / (15 * 60) = 0.5 per second
     # thus 1 request every 2 seconds
-    month_ago = datetime.datetime.utcnow() - datetime.timedelta(days=30)
-    day_ago = datetime.datetime.utcnow() - datetime.timedelta(days=1)
-    params = urllib.urlencode({
-        'q': 'filter:links since:{} until:{} #{} -filter:retweets'.format(
-            month_ago.strftime('%Y-%m-%d'),
-            day_ago.strftime('%Y-%m-%d'),
-            topic,
-        ),
-        'result_type': 'recent',
-        'include_entities': 1,
-        'count': 100,
-        'since_id': since_id,
-    })
-    # count, until, since_id, max_id
-    app.logger.info('params {}'.format(params))
-    res = urlfetch.fetch(
-        url='https://api.twitter.com/1.1/search/tweets.json?{}'.format(params),
-        method=urlfetch.GET,
-        headers={
-            'Authorization': 'Bearer {}'.format(access_token),
-        },
-    )
-    app.logger.info(res)
+    access_token = 'AAAAAAAAAAAAAAAAAAAAABcJYAAAAAAAVviSzyKtPYqYlHpZxoim6DHvfjI%3DU0slNkvBKQRynT62gbvQjEhAlE2PvzVZNia99xAdoJweI2OLqe'
+    body = ''
 
-    cnt = 0
-    max_cnt = 90 if app.config['DEBUG'] else 1222333
-    while cnt < max_cnt:
-        content = json.loads(res.content)
-        metadata = content['search_metadata']
-        statuses = content['statuses']
-        # app.logger.info('Metadata: {}'.format(metadata))
-        # app.logger.info('Statuses: {}'.format(len(statuses)))
-        cnt += len(statuses)
+    app.logger.info('request form: {}'.format(request.form))
+    topic = request.form.get('topic')
+    if not topic:
+        abort(400)
+    body += 'Topic {}\n\n'.format(topic)
 
-        for status in statuses:
-            app.logger.info('Processing status')
-            tweet = Tweet.create(topic, status)
+    # this can be original (get since_id) or repeated (use next_results)
+    next_results = request.form.get('next_results', None)
+    if next_results:
+        app.logger.info('Scraping next page results')
+        res = urlfetch.fetch(
+            url='{}{}'.format('https://api.twitter.com/1.1/search/tweets.json', next_results),
+            method=urlfetch.GET,
+            headers={
+                'Authorization': 'Bearer {}'.format(access_token),
+            },
+        )
+    else:
+        app.logger.info('Scraping with since id')
+        # get since ID
+        since_id = Tweet.since_id(topic)
+        month_ago = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+        day_ago = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+        params = urllib.urlencode({
+            'q': 'filter:links since:{} until:{} #{} -filter:retweets'.format(
+                month_ago.strftime('%Y-%m-%d'),
+                day_ago.strftime('%Y-%m-%d'),
+                topic,
+            ),
+            'result_type': 'recent',
+            'include_entities': 1,
+            'count': 10,
+            'since_id': since_id,
+        })
+        # count, until, since_id, max_id
+        app.logger.info('params {}'.format(params))
+        res = urlfetch.fetch(
+            url='https://api.twitter.com/1.1/search/tweets.json?{}'.format(params),
+            method=urlfetch.GET,
+            headers={
+                'Authorization': 'Bearer {}'.format(access_token),
+            },
+        )
+        app.logger.info(res)
 
-        if 'next_results' not in metadata:
-            app.logger.info('No more statuses')
-            break
-        else:
-            app.logger.info('Fetching more results at {}'.format(metadata['next_results']))
-            res = urlfetch.fetch(
-                url='{}{}'.format('https://api.twitter.com/1.1/search/tweets.json', metadata['next_results']),
-                method=urlfetch.GET,
-                headers={
-                    'Authorization': 'Bearer {}'.format(access_token),
-                },
-            )
+    # parse response
+    app.logger.info('Processing response from twitter')
+    content = json.loads(res.content)
+    metadata = content['search_metadata']
+    statuses = content['statuses']
+    # app.logger.info('Metadata: {}'.format(metadata))
+    app.logger.info('Statuses: {}'.format(len(statuses)))
+    body += '{} statuses found\n\n'.format(len(statuses))
 
-    # continue with nothing, quota will be obliterated with this
+    # process tweets
+    for status in statuses:
+        tweet = Tweet.create(topic, status)
+        # score url
+        for url in tweet.urls:
+            # expand url
+            #http://api.longurl.org/v2/expand?url=http%3A%2F%2Fis.gd%2Fw
+            # upsert url
+            link = Link.upsert(topic, url, tweet.retweet_count)
+            body += '{}: {}\n'.format(link.tweet_count, link.id)
+
+    # continue scraping
+    if 'next_results' not in metadata:
+        app.logger.info('No more statuses')
+    elif not app.config['DEBUG']:
+        params = {'topic': topic, 'next_results': metadata['next_results']}
+        app.logger.info('Scheduled scraping topic for {}'.format(params))
+        taskqueue.add(url='/cron/topic', params={'topic': topic})
 
     mail.send_mail(
         sender='jacoj82@gmail.com',
         to='jacoj82@gmail.com',
         subject='Cron topic {}'.format(topic),
-        body='Scraped {} tweets for topic {}'.format(cnt, topic),
+        body=body,
     )
 
-    app.logger.info('Scraped {} tweets for topic {}'.format(cnt, topic))
+    app.logger.info('Scraped {} tweets for topic {}'.format(len(statuses), topic))
     return Response('OK')
-
-

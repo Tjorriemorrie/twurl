@@ -1,5 +1,6 @@
 google-api-python-client
 Flask
 Flask_JsonTools
+flask-cors
 TwitterAPI
 twython

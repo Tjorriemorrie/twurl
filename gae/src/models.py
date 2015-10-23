@@ -197,29 +197,22 @@ class Tweet(ndb.Model):
 
 class Link(ndb.Model):
     id = ndb.StringProperty(required=True)
-    tweeted_count = ndb.IntegerProperty(required=True)
-    retweeted_sum = ndb.FloatProperty(required=True)
-    favorite_sum = ndb.FloatProperty(required=True)
-    priority = ndb.ComputedProperty(lambda self: self.tweeted_count + self.retweeted_sum + self.favorite_sum)
+    tweet_count = ndb.IntegerProperty(required=True, default=0)
 
     created_at = ndb.DateTimeProperty(auto_now_add=True)
     updated_at = ndb.DateTimeProperty(auto_now=True)
 
     @staticmethod
-    def create(topic, url, url_info):
-        link = Link.get_or_insert(url, parent=ndb.Key('Topic', topic), **url_info)
-        if link.tweeted_count != url_info['tweeted_count']:
-            link.populate(**url_info)
-            link.put()
-            app.logger.debug('Link updated: {}'.format(link))
-        else:
-            app.logger.debug('Link created: {}'.format(link))
-
+    def upsert(topic, url, retweet_count):
+        link = Link.get_or_insert(url, parent=ndb.Key('Topic', topic), id=url)
+        link.tweet_count += 1 + int(retweet_count)
+        link.put()
+        app.logger.debug('Link upsert: {} {}'.format(link.tweet_count, link.id))
         return link
 
     @staticmethod
     def fetchByTopic(topic):
-        links = Link.query(ancestor=ndb.Key('Topic', topic)).order(-Link.priority).fetch()
+        links = Link.query(ancestor=ndb.Key('Topic', topic)).order(-Link.tweet_count).fetch()
         app.logger.info('Fetched {} links for topic {}'.format(len(links), topic))
         return links
 
